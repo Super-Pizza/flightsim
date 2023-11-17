@@ -1,0 +1,30 @@
+[package]
+name = "flightsim"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ash = "0.37"
+winit = "0.29.3"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true
+
+[profile.dev]
+opt-level = 1
+lto = false
+
+[profile.production]
+inherits = "release"
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
+
+[profile.production.package.'*']
+opt-level = "z"
+codegen-units = 1
+strip = true
