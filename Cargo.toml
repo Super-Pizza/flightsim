@@ -2,7 +2,7 @@
 name = "flightsim"
 version = "0.1.0"
 edition = "2021"
-authors = "fabien <fabien@cournoyer.club>"
+authors = ["fabien <fabien@cournoyer.club>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Super-Pizza/flightsim"
 description = "Flight Simulator"
