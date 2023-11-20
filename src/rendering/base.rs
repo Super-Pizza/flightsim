@@ -13,6 +13,7 @@ pub struct AppBase {
     pub surface_khr: khr::Surface,
     pub surface: Vk::SurfaceKHR,
     pub physical_device: Vk::PhysicalDevice,
+    pub qu_idx: u32,
 }
 
 impl AppBase {
@@ -51,6 +52,8 @@ impl AppBase {
         let physical_devices = unsafe { instance.enumerate_physical_devices() }.map_err(e)?;
         let physical_device =
             Self::choose_physical_device(&instance, physical_devices).map_err(e)?;
+        let qu_idx = Self::get_queue_index(&instance, &physical_device, &surface_khr, &surface)
+            .map_err(e)?;
         Ok(Self {
             event_loop: Some(event_loop),
             window,
@@ -59,6 +62,7 @@ impl AppBase {
             surface,
             surface_khr,
             physical_device,
+            qu_idx,
         })
     }
     fn choose_physical_device(
@@ -83,5 +87,28 @@ impl AppBase {
         } else {
             other.unwrap()
         })
+    }
+    fn get_queue_index(
+        instance: &ash::Instance,
+        physical_device: &Vk::PhysicalDevice,
+        surface_khr: &khr::Surface,
+        surface: &Vk::SurfaceKHR,
+    ) -> VkResult<u32> {
+        let queue_properties =
+            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
+        for (idx, queue) in queue_properties.iter().enumerate() {
+            if queue.queue_flags.contains(Vk::QueueFlags::GRAPHICS)
+                && unsafe {
+                    surface_khr.get_physical_device_surface_support(
+                        *physical_device,
+                        idx as u32,
+                        *surface,
+                    )
+                }?
+            {
+                return Ok(idx as u32);
+            }
+        }
+        Err(Vk::Result::ERROR_INCOMPATIBLE_DISPLAY_KHR)
     }
 }
