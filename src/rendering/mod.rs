@@ -2,6 +2,7 @@ mod base;
 mod device;
 
 use ash::{extensions::khr, prelude::*, vk as Vk};
+use winit::window::Window;
 
 pub fn e(e: Vk::Result) -> String {
     e.to_string()

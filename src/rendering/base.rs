@@ -3,7 +3,7 @@ use std::ffi::CStr;
 use super::*;
 
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use winit::{event_loop::EventLoop, window::Window};
+use winit::event_loop::EventLoop;
 
 pub struct AppBase {
     pub event_loop: Option<EventLoop<()>>,
