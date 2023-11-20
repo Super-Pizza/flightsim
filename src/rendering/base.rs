@@ -5,10 +5,6 @@ use super::*;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::{event_loop::EventLoop, window::Window};
 
-pub fn e(e: Vk::Result) -> String {
-    e.to_string()
-}
-
 pub struct AppBase {
     pub event_loop: Option<EventLoop<()>>,
     pub window: Window,
@@ -68,7 +64,7 @@ impl AppBase {
     fn choose_physical_device(
         instance: &ash::Instance,
         physical_devices: Vec<Vk::PhysicalDevice>,
-    ) -> Result<Vk::PhysicalDevice, Vk::Result> {
+    ) -> VkResult<Vk::PhysicalDevice> {
         let mut discrete = None;
         let mut integrated = None;
         let mut other = None;

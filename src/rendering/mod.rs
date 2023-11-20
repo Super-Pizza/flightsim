@@ -1,6 +1,11 @@
 mod base;
+mod device;
 
-use ash::{extensions::khr, vk as Vk};
+use ash::{extensions::khr, prelude::*, vk as Vk};
+
+pub fn e(e: Vk::Result) -> String {
+    e.to_string()
+}
 
 pub struct App {
     pub base: base::AppBase,
