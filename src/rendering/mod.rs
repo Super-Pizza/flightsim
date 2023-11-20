@@ -12,6 +12,11 @@ impl App {
 
 impl Drop for App {
     fn drop(&mut self) {
-        
+        unsafe {
+            self.base
+                .surface_khr
+                .destroy_surface(self.base.surface, None);
+            self.base.instance.destroy_instance(None);
+        }
     }
 }
