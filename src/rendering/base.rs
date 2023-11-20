@@ -16,6 +16,7 @@ pub struct AppBase {
     pub instance: ash::Instance,
     pub surface_khr: khr::Surface,
     pub surface: Vk::SurfaceKHR,
+    pub physical_device: Vk::PhysicalDevice,
 }
 
 impl AppBase {
@@ -51,6 +52,9 @@ impl AppBase {
             )
         }
         .map_err(e)?;
+        let physical_devices = unsafe { instance.enumerate_physical_devices() }.map_err(e)?;
+        let physical_device =
+            Self::choose_physical_device(&instance, physical_devices).map_err(e)?;
         Ok(Self {
             event_loop: Some(event_loop),
             window,
@@ -58,6 +62,30 @@ impl AppBase {
             instance,
             surface,
             surface_khr,
+            physical_device,
+        })
+    }
+    fn choose_physical_device(
+        instance: &ash::Instance,
+        physical_devices: Vec<Vk::PhysicalDevice>,
+    ) -> Result<Vk::PhysicalDevice, Vk::Result> {
+        let mut discrete = None;
+        let mut integrated = None;
+        let mut other = None;
+        for device in physical_devices {
+            let properties = unsafe { instance.get_physical_device_properties(device) };
+            match properties.device_type {
+                Vk::PhysicalDeviceType::DISCRETE_GPU => discrete = Some(device),
+                Vk::PhysicalDeviceType::INTEGRATED_GPU => integrated = Some(device),
+                _ => other = Some(device),
+            }
+        }
+        Ok(if let Some(d) = discrete {
+            d
+        } else if let Some(d) = integrated {
+            d
+        } else {
+            other.unwrap()
         })
     }
 }
