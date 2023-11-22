@@ -10,7 +10,10 @@ impl AppDevice {
             .queue_family_index(base.qu_idx)
             .queue_priorities(&[1.0])
             .build()];
-        let device_info = Vk::DeviceCreateInfo::builder().queue_create_infos(&queue_create_info);
+        let exts = [khr::Swapchain::name().as_ptr()];
+        let device_info = Vk::DeviceCreateInfo::builder()
+            .queue_create_infos(&queue_create_info)
+            .enabled_extension_names(&exts);
         let device = unsafe {
             base.instance
                 .create_device(base.physical_device, &device_info, None)

@@ -30,6 +30,9 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .swapchain_khr
+                .destroy_swapchain(self.device.swapchain, None);
             self.device.device.destroy_device(None);
             self.base
                 .surface_khr
