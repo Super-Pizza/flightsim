@@ -19,6 +19,13 @@ impl AppDevice {
                 .create_device(base.physical_device, &device_info, None)
         }
         .map_err(e)?;
+        let swapchain_format =
+            Self::get_swapchain_format(&base.surface_khr, &base.surface, &base.physical_device)
+                .map_err(e)?;
+        let swapchain_extent = Vk::Extent2D {
+            width: base.window.inner_size().width,
+            height: base.window.inner_size().height,
+        };
         let swapchain_khr = khr::Swapchain::new(&base.instance, &device);
         let swapchain = Self::create_swapchain(
             &swapchain_khr,
@@ -26,7 +33,8 @@ impl AppDevice {
             base.surface,
             base.qu_idx,
             &base.physical_device,
-            &base.window,
+            swapchain_format,
+            swapchain_extent,
         )
         .map_err(e)?;
         Ok(Self {
@@ -35,13 +43,31 @@ impl AppDevice {
             swapchain,
         })
     }
+    fn get_swapchain_format(
+        surface_khr: &khr::Surface,
+        surface: &Vk::SurfaceKHR,
+        physical_device: &Vk::PhysicalDevice,
+    ) -> VkResult<Vk::SurfaceFormatKHR> {
+        let surface_formats =
+            unsafe { surface_khr.get_physical_device_surface_formats(*physical_device, *surface) }?;
+        let mut format = surface_formats[0];
+        for surface_fmt in surface_formats {
+            if surface_fmt.format == Vk::Format::B8G8R8A8_SRGB
+                && surface_fmt.color_space == Vk::ColorSpaceKHR::SRGB_NONLINEAR
+            {
+                format = surface_fmt
+            }
+        }
+        Ok(format)
+    }
     fn create_swapchain(
         swapchain_khr: &khr::Swapchain,
         surface_khr: &khr::Surface,
         surface: Vk::SurfaceKHR,
         qu_idx: u32,
         physical_device: &Vk::PhysicalDevice,
-        window: &Window,
+        format: Vk::SurfaceFormatKHR,
+        extent: Vk::Extent2D,
     ) -> VkResult<Vk::SwapchainKHR> {
         let properties = unsafe {
             surface_khr.get_physical_device_surface_capabilities(*physical_device, surface)
@@ -51,16 +77,6 @@ impl AppDevice {
             (a, b) if b > a => a + 1,
             (_, b) => b,
         };
-        let surface_formats =
-            unsafe { surface_khr.get_physical_device_surface_formats(*physical_device, surface) }?;
-        let mut format = surface_formats[0];
-        for surface_fmt in surface_formats {
-            if surface_fmt.format == Vk::Format::B8G8R8A8_SRGB
-                && surface_fmt.color_space == Vk::ColorSpaceKHR::SRGB_NONLINEAR
-            {
-                format = surface_fmt
-            }
-        }
         let present_modes = unsafe {
             surface_khr.get_physical_device_surface_present_modes(*physical_device, surface)
         }?;
@@ -76,10 +92,7 @@ impl AppDevice {
             .min_image_count(image_count)
             .image_format(format.format)
             .image_color_space(format.color_space)
-            .image_extent(Vk::Extent2D {
-                width: window.inner_size().width,
-                height: window.inner_size().height,
-            })
+            .image_extent(extent)
             .image_array_layers(1)
             .image_usage(Vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(Vk::SharingMode::EXCLUSIVE)
