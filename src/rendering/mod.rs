@@ -37,6 +37,10 @@ impl Drop for App {
             self.base
                 .surface_khr
                 .destroy_surface(self.base.surface, None);
+            #[cfg(feature = "debuginfo")]
+            self.base
+                .debug_utils
+                .destroy_debug_utils_messenger(self.base.debug_messenger, None);
             self.base.instance.destroy_instance(None);
         }
     }
