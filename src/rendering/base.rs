@@ -10,6 +10,10 @@ pub struct AppBase {
     pub window: Window,
     pub entry: ash::Entry,
     pub instance: ash::Instance,
+    #[cfg(feature = "debuginfo")]
+    pub debug_utils: ext::DebugUtils,
+    #[cfg(feature = "debuginfo")]
+    pub debug_messenger: Vk::DebugUtilsMessengerEXT,
     pub surface_khr: khr::Surface,
     pub surface: Vk::SurfaceKHR,
     pub physical_device: Vk::PhysicalDevice,
@@ -20,9 +24,23 @@ impl AppBase {
     pub fn new() -> Result<Self, String> {
         let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
         let window = Window::new(&event_loop).map_err(|e| e.to_string())?;
-        let exts =
-            ash_window::enumerate_required_extensions(window.raw_display_handle()).map_err(e)?;
+        #[allow(unused_mut)]
+        let mut exts = ash_window::enumerate_required_extensions(window.raw_display_handle())
+            .map_err(e)?
+            .to_owned();
         let entry = unsafe { ash::Entry::load() }.map_err(|e| e.to_string())?;
+        #[cfg(feature = "debuginfo")]
+        let mut debug_messengr_info = Vk::DebugUtilsMessengerCreateInfoEXT::builder()
+            .pfn_user_callback(Some(message_callback))
+            .message_severity(
+                Vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                    | Vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
+            )
+            .message_type(
+                Vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                    | Vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                    | Vk::DebugUtilsMessageTypeFlagsEXT::GENERAL,
+            );
         let app_info = &Vk::ApplicationInfo::builder()
             .api_version(Vk::API_VERSION_1_2)
             .application_version(Vk::make_api_version(
@@ -34,10 +52,20 @@ impl AppBase {
             .engine_name(CStr::from_bytes_with_nul(b"\0").unwrap())
             .engine_version(0)
             .application_name(CStr::from_bytes_with_nul(b"Flight Simulator\0").unwrap());
-        let instance_info = &Vk::InstanceCreateInfo::builder()
+        #[cfg(feature = "debuginfo")]
+        exts.push(ext::DebugUtils::name().as_ptr());
+        let instance_info = Vk::InstanceCreateInfo::builder()
             .application_info(app_info)
-            .enabled_extension_names(exts);
-        let instance = unsafe { entry.create_instance(instance_info, None) }.map_err(e)?;
+            .enabled_extension_names(&exts);
+        #[cfg(feature = "debuginfo")]
+        let instance_info = instance_info.push_next(&mut debug_messengr_info);
+        let instance = unsafe { entry.create_instance(&instance_info, None) }.map_err(e)?;
+        #[cfg(feature = "debuginfo")]
+        let debug_utils = ext::DebugUtils::new(&entry, &instance);
+        #[cfg(feature = "debuginfo")]
+        let debug_messenger =
+            unsafe { debug_utils.create_debug_utils_messenger(&debug_messengr_info, None) }
+                .map_err(e)?;
         let surface_khr = khr::Surface::new(&entry, &instance);
         let surface = unsafe {
             ash_window::create_surface(
@@ -59,6 +87,10 @@ impl AppBase {
             window,
             entry,
             instance,
+            #[cfg(feature = "debuginfo")]
+            debug_utils,
+            #[cfg(feature = "debuginfo")]
+            debug_messenger,
             surface,
             surface_khr,
             physical_device,
