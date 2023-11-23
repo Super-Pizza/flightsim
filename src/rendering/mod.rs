@@ -2,8 +2,9 @@ mod base;
 mod device;
 mod pipeline;
 
+use std::ffi::CStr;
 #[cfg(feature = "debuginfo")]
-use std::{ffi::CStr, io::Write, os::raw::c_void};
+use std::{io::Write, os::raw::c_void};
 
 use ash::{
     extensions::{ext, khr},
@@ -37,6 +38,15 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .device
+                .destroy_pipeline(self.pipeline.pipeline, None);
+            self.device
+                .device
+                .destroy_pipeline_layout(self.pipeline.pipeline_layout, None);
+            self.device
+                .device
+                .destroy_pipeline_cache(self.pipeline.pipeline_cache, None);
             for shader in self.pipeline.shaders {
                 self.device.device.destroy_shader_module(shader, None);
             }

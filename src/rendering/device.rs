@@ -7,6 +7,7 @@ pub struct AppDevice {
     pub swapchain_images: Vec<Vk::Image>,
     pub swapchain_views: Vec<Vk::ImageView>,
     pub swapchain_fbs: Vec<Vk::Framebuffer>,
+    pub swapchain_extent: Vk::Extent2D,
 }
 impl AppDevice {
     pub fn new(base: &base::AppBase) -> Result<Self, String> {
@@ -59,6 +60,7 @@ impl AppDevice {
             swapchain_images,
             swapchain_views,
             swapchain_fbs,
+            swapchain_extent
         })
     }
     fn get_swapchain_format(
