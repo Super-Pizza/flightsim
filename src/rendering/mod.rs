@@ -42,6 +42,15 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for fence in self.runtime.render_finished_fences.iter() {
+                self.device.device.destroy_fence(*fence, None);
+            }
+            for semaphore in self.runtime.render_finished_semaphores.iter() {
+                self.device.device.destroy_semaphore(*semaphore, None);
+            }
+            for semaphore in self.runtime.image_available_semaphores.iter() {
+                self.device.device.destroy_semaphore(*semaphore, None);
+            }
             self.device
                 .device
                 .reset_command_pool(
