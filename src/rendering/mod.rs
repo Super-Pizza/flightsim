@@ -110,18 +110,26 @@ unsafe extern "system" fn message_callback(
         _ => "\x1b[37m[VERBOSE]",
     };
     let type_str = match msg_type {
-        Vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "\x1b[35m[PERFORMANCE]",
-        Vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "\x1b[34m[VALIDATION]",
-        _ => "\x1b[97m[GENERAL]",
+        Vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "\x1b[35m[PERFORMANCE]\x1b[0m",
+        Vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "\x1b[34m[VALIDATION]\x1b[0m",
+        _ => "\x1b[0m[GENERAL]",
     };
     if callback_data.is_null() {
         return Vk::TRUE;
     }
     let callback_data = *callback_data;
     let message = CStr::from_ptr(callback_data.p_message).to_string_lossy();
-    let mut message_id = callback_data.message_id_number.to_string();
-    message_id.insert(0, '[');
-    message_id.push('(');
+    fn hex(d: u8) -> char {
+        (d + 0x37 - ((d + 0x36) & 0x10) / 16 * 7) as char
+    }
+    let mut message_id = callback_data
+        .message_id_number
+        .to_be_bytes()
+        .iter()
+        .flat_map(|d| [hex(d >> 4), hex(d & 0xF)])
+        .collect::<String>();
+    message_id.insert_str(0, "[0x");
+    message_id.push_str(" (");
     message_id.push_str(
         CStr::from_ptr(callback_data.p_message_id_name)
             .to_string_lossy()
@@ -147,7 +155,8 @@ unsafe extern "system" fn message_callback(
     lock.write_all(severity_str.as_bytes()).unwrap_or(());
     lock.write_all(type_str.as_bytes()).unwrap_or(());
     lock.write_all(message_id.as_bytes()).unwrap_or(());
-    lock.write_all(message.as_bytes()).unwrap_or(());
+    lock.write_all(message.splitn(3, " | ").last().unwrap_or("").as_bytes())
+        .unwrap_or(());
     lock.write_all(object_infos.as_bytes()).unwrap_or(());
     lock.flush().unwrap_or(());
     Vk::TRUE
