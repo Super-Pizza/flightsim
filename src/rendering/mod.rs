@@ -1,5 +1,6 @@
 mod base;
 mod device;
+mod pipeline;
 
 #[cfg(feature = "debuginfo")]
 use std::{ffi::CStr, io::Write, os::raw::c_void};
@@ -18,18 +19,27 @@ pub fn e(e: Vk::Result) -> String {
 pub struct App {
     pub base: base::AppBase,
     pub device: device::AppDevice,
+    pub pipeline: pipeline::AppPipeline,
 }
 impl App {
     pub fn new() -> Result<Self, String> {
         let base = base::AppBase::new()?;
         let device = device::AppDevice::new(&base)?;
-        Ok(Self { base, device })
+        let pipeline = pipeline::AppPipeline::new(&device)?;
+        Ok(Self {
+            base,
+            device,
+            pipeline,
+        })
     }
 }
 
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for shader in self.pipeline.shaders {
+                self.device.device.destroy_shader_module(shader, None);
+            }
             for fb in self.device.swapchain_fbs.iter() {
                 self.device.device.destroy_framebuffer(*fb, None);
             }
