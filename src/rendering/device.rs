@@ -30,19 +30,14 @@ impl AppDevice {
         let swapchain_format =
             Self::get_swapchain_format(&base.surface_khr, &base.surface, &base.physical_device)
                 .map_err(e)?;
-        let swapchain_extent = Vk::Extent2D {
-            width: base.window.inner_size().width,
-            height: base.window.inner_size().height,
-        };
         let swapchain_khr = khr::Swapchain::new(&base.instance, &device);
-        let swapchain = Self::create_swapchain(
+        let (swapchain, swapchain_extent) = Self::create_swapchain(
             &swapchain_khr,
             &base.surface_khr,
             base.surface,
             base.qu_idx,
             &base.physical_device,
             swapchain_format,
-            swapchain_extent,
         )
         .map_err(e)?;
         let renderpass = Self::create_renderpass(&device, swapchain_format.format).map_err(e)?;
@@ -92,8 +87,7 @@ impl AppDevice {
         qu_idx: u32,
         physical_device: &Vk::PhysicalDevice,
         format: Vk::SurfaceFormatKHR,
-        extent: Vk::Extent2D,
-    ) -> VkResult<Vk::SwapchainKHR> {
+    ) -> VkResult<(Vk::SwapchainKHR, Vk::Extent2D)> {
         let properties = unsafe {
             surface_khr.get_physical_device_surface_capabilities(*physical_device, surface)
         }?;
@@ -117,7 +111,7 @@ impl AppDevice {
             .min_image_count(image_count)
             .image_format(format.format)
             .image_color_space(format.color_space)
-            .image_extent(extent)
+            .image_extent(properties.current_extent)
             .image_array_layers(1)
             .image_usage(Vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(Vk::SharingMode::EXCLUSIVE)
@@ -126,7 +120,8 @@ impl AppDevice {
             .composite_alpha(Vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
             .clipped(true);
-        unsafe { swapchain_khr.create_swapchain(&swapchain_info, None) }
+        let swapchain = unsafe { swapchain_khr.create_swapchain(&swapchain_info, None) }?;
+        Ok((swapchain, properties.current_extent))
     }
     pub fn create_renderpass(
         device: &ash::Device,

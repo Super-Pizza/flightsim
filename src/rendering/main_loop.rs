@@ -185,24 +185,13 @@ impl App {
         let redo_renderpass = self.device.swapchain_format != current_image_format;
         self.cleanup_swapchain(redo_renderpass);
         let device = &self.device.device;
-        let swapchain_extent = unsafe {
-            self.base
-                .surface_khr
-                .get_physical_device_surface_capabilities(
-                    self.base.physical_device,
-                    self.base.surface,
-                )
-                .unwrap()
-        }
-        .current_extent;
-        let swapchain = device::AppDevice::create_swapchain(
+        let (swapchain, swapchain_extent) = device::AppDevice::create_swapchain(
             &self.device.swapchain_khr,
             &self.base.surface_khr,
             self.base.surface,
             self.base.qu_idx,
             &self.base.physical_device,
             current_image_format,
-            swapchain_extent,
         )
         .unwrap();
         unsafe {
