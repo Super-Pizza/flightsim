@@ -55,13 +55,11 @@ impl AppPipeline {
             Vk::PipelineShaderStageCreateInfo::builder()
                 .stage(Vk::ShaderStageFlags::VERTEX)
                 .module(shaders[VERT_SHADER_IDX])
-                .specialization_info(&Vk::SpecializationInfo::default())
                 .name(CStr::from_bytes_with_nul(b"main\0").unwrap())
                 .build(),
             Vk::PipelineShaderStageCreateInfo::builder()
                 .stage(Vk::ShaderStageFlags::FRAGMENT)
                 .module(shaders[FRAG_SHADER_IDX])
-                .specialization_info(&Vk::SpecializationInfo::default())
                 .name(CStr::from_bytes_with_nul(b"main\0").unwrap())
                 .build(),
         ];
