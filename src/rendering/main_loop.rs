@@ -1,5 +1,4 @@
 use super::*;
-use winit::event::DeviceId;
 impl App {
     pub fn run(&mut self) -> Result<(), String> {
         let ev_loop = self.base.event_loop.take().unwrap();
@@ -7,8 +6,8 @@ impl App {
             .run(|ev, win| {
                 win.set_control_flow(winit::event_loop::ControlFlow::Poll);
                 match ev {
-                    winit::event::Event::WindowEvent { window_id, event } => match event {
-                        //winit::event::WindowEvent::Resized(_) => todo!(),
+                    winit::event::Event::WindowEvent { event, .. } => match event {
+                        winit::event::WindowEvent::Resized(_) => self.resize(),
                         winit::event::WindowEvent::CloseRequested => win.exit(),
                         //winit::event::WindowEvent::Destroyed => todo!(),
                         //winit::event::WindowEvent::Focused(_) => todo!(),
@@ -173,5 +172,78 @@ impl App {
         unsafe { device.cmd_draw(self.runtime.command_buffers[index], 3, 1, 0, 0) }
         unsafe { device.cmd_end_render_pass(self.runtime.command_buffers[index]) }
         unsafe { device.end_command_buffer(self.runtime.command_buffers[index]) }.unwrap();
+    }
+    #[cold]
+    fn resize(&mut self) {
+        unsafe { self.device.device.device_wait_idle() }.unwrap();
+        let current_image_format = device::AppDevice::get_swapchain_format(
+            &self.base.surface_khr,
+            &self.base.surface,
+            &self.base.physical_device,
+        )
+        .unwrap();
+        let redo_renderpass = self.device.swapchain_format != current_image_format;
+        self.cleanup_swapchain(redo_renderpass);
+        let device = &self.device.device;
+        let swapchain_extent = unsafe {
+            self.base
+                .surface_khr
+                .get_physical_device_surface_capabilities(
+                    self.base.physical_device,
+                    self.base.surface,
+                )
+                .unwrap()
+        }
+        .current_extent;
+        let swapchain = device::AppDevice::create_swapchain(
+            &self.device.swapchain_khr,
+            &self.base.surface_khr,
+            self.base.surface,
+            self.base.qu_idx,
+            &self.base.physical_device,
+            current_image_format,
+            swapchain_extent,
+        )
+        .unwrap();
+        unsafe {
+            self.device
+                .swapchain_khr
+                .destroy_swapchain(self.device.swapchain, None)
+        };
+        self.device.swapchain = swapchain;
+        self.device.swapchain_format = current_image_format;
+        self.device.swapchain_extent = swapchain_extent;
+        if redo_renderpass {
+            let renderpass =
+                device::AppDevice::create_renderpass(device, self.device.swapchain_format.format)
+                    .unwrap();
+            self.device.renderpass = renderpass;
+        }
+        let (swapchain_images, swapchain_views, swapchain_fbs) =
+            device::AppDevice::get_swapchain_images(
+                device,
+                &self.device.swapchain_khr,
+                &self.device.swapchain,
+                self.device.swapchain_format.format,
+                self.device.swapchain_extent,
+                &self.device.renderpass,
+            )
+            .unwrap();
+        self.device.swapchain_images = swapchain_images;
+        self.device.swapchain_views = swapchain_views;
+        self.device.swapchain_fbs = swapchain_fbs;
+        self.runtime.swapchain_ok = true;
+    }
+    pub fn cleanup_swapchain(&mut self, redo_renderpass: bool) {
+        let device = &self.device.device;
+        for framebuffer in &self.device.swapchain_fbs {
+            unsafe { device.destroy_framebuffer(*framebuffer, None) }
+        }
+        if redo_renderpass {
+            unsafe { device.destroy_render_pass(self.device.renderpass, None) }
+        }
+        for image_view in self.device.swapchain_views.iter() {
+            unsafe { device.destroy_image_view(*image_view, None) }
+        }
     }
 }

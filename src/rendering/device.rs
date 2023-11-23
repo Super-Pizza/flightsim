@@ -4,6 +4,7 @@ pub struct AppDevice {
     pub queue: Vk::Queue,
     pub swapchain_khr: khr::Swapchain,
     pub swapchain: Vk::SwapchainKHR,
+    pub swapchain_format: Vk::SurfaceFormatKHR,
     pub renderpass: Vk::RenderPass,
     pub swapchain_images: Vec<Vk::Image>,
     pub swapchain_views: Vec<Vk::ImageView>,
@@ -59,6 +60,7 @@ impl AppDevice {
             queue,
             swapchain_khr,
             swapchain,
+            swapchain_format,
             renderpass,
             swapchain_images,
             swapchain_views,
@@ -66,7 +68,7 @@ impl AppDevice {
             swapchain_extent,
         })
     }
-    fn get_swapchain_format(
+    pub fn get_swapchain_format(
         surface_khr: &khr::Surface,
         surface: &Vk::SurfaceKHR,
         physical_device: &Vk::PhysicalDevice,
@@ -83,7 +85,7 @@ impl AppDevice {
         }
         Ok(format)
     }
-    fn create_swapchain(
+    pub fn create_swapchain(
         swapchain_khr: &khr::Swapchain,
         surface_khr: &khr::Surface,
         surface: Vk::SurfaceKHR,
@@ -126,7 +128,7 @@ impl AppDevice {
             .clipped(true);
         unsafe { swapchain_khr.create_swapchain(&swapchain_info, None) }
     }
-    fn create_renderpass(
+    pub fn create_renderpass(
         device: &ash::Device,
         swapchain_format: Vk::Format,
     ) -> VkResult<Vk::RenderPass> {
@@ -162,7 +164,7 @@ impl AppDevice {
             .dependencies(&dependencies);
         unsafe { device.create_render_pass(&renderpass_info, None) }
     }
-    fn get_swapchain_images(
+    pub fn get_swapchain_images(
         device: &ash::Device,
         swapchain_khr: &khr::Swapchain,
         swapchain: &Vk::SwapchainKHR,

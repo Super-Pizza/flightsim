@@ -44,6 +44,7 @@ impl Drop for App {
     fn drop(&mut self) {
         unsafe {
             self.device.device.device_wait_idle();
+            self.cleanup_swapchain(true);
             for fence in self.runtime.render_finished_fences.iter() {
                 self.device.device.destroy_fence(*fence, None);
             }
@@ -75,15 +76,6 @@ impl Drop for App {
             for shader in self.pipeline.shaders {
                 self.device.device.destroy_shader_module(shader, None);
             }
-            for fb in self.device.swapchain_fbs.iter() {
-                self.device.device.destroy_framebuffer(*fb, None);
-            }
-            for view in self.device.swapchain_views.iter() {
-                self.device.device.destroy_image_view(*view, None);
-            }
-            self.device
-                .device
-                .destroy_render_pass(self.device.renderpass, None);
             self.device
                 .swapchain_khr
                 .destroy_swapchain(self.device.swapchain, None);
