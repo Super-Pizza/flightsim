@@ -1,6 +1,7 @@
 mod base;
 mod device;
 mod pipeline;
+mod runtime;
 
 use std::ffi::CStr;
 #[cfg(feature = "debuginfo")]
@@ -21,16 +22,19 @@ pub struct App {
     pub base: base::AppBase,
     pub device: device::AppDevice,
     pub pipeline: pipeline::AppPipeline,
+    pub runtime: runtime::AppRuntime,
 }
 impl App {
     pub fn new() -> Result<Self, String> {
         let base = base::AppBase::new()?;
         let device = device::AppDevice::new(&base)?;
         let pipeline = pipeline::AppPipeline::new(&device)?;
+        let runtime = runtime::AppRuntime::new(&base, &device)?;
         Ok(Self {
             base,
             device,
             pipeline,
+            runtime,
         })
     }
 }
@@ -38,6 +42,16 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .device
+                .reset_command_pool(
+                    self.runtime.command_pool,
+                    Vk::CommandPoolResetFlags::RELEASE_RESOURCES,
+                )
+                .unwrap();
+            self.device
+                .device
+                .destroy_command_pool(self.runtime.command_pool, None);
             self.device
                 .device
                 .destroy_pipeline(self.pipeline.pipeline, None);
