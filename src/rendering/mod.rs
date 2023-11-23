@@ -43,7 +43,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.device_wait_idle();
+            self.device.device.device_wait_idle().unwrap_or(());
             self.cleanup_swapchain(true);
             for fence in self.runtime.render_finished_fences.iter() {
                 self.device.device.destroy_fence(*fence, None);
