@@ -4,6 +4,9 @@ pub struct AppDevice {
     pub swapchain_khr: khr::Swapchain,
     pub swapchain: Vk::SwapchainKHR,
     pub renderpass: Vk::RenderPass,
+    pub swapchain_images: Vec<Vk::Image>,
+    pub swapchain_views: Vec<Vk::ImageView>,
+    pub swapchain_fbs: Vec<Vk::Framebuffer>,
 }
 impl AppDevice {
     pub fn new(base: &base::AppBase) -> Result<Self, String> {
@@ -39,11 +42,23 @@ impl AppDevice {
         )
         .map_err(e)?;
         let renderpass = Self::create_renderpass(&device, swapchain_format.format).map_err(e)?;
+        let (swapchain_images, swapchain_views, swapchain_fbs) = Self::get_swapchain_images(
+            &device,
+            &swapchain_khr,
+            &swapchain,
+            swapchain_format.format,
+            swapchain_extent,
+            &renderpass,
+        )
+        .map_err(e)?;
         Ok(Self {
             device,
             swapchain_khr,
             swapchain,
             renderpass,
+            swapchain_images,
+            swapchain_views,
+            swapchain_fbs,
         })
     }
     fn get_swapchain_format(
@@ -141,5 +156,44 @@ impl AppDevice {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
         unsafe { device.create_render_pass(&renderpass_info, None) }
+    }
+    fn get_swapchain_images(
+        device: &ash::Device,
+        swapchain_khr: &khr::Swapchain,
+        swapchain: &Vk::SwapchainKHR,
+        swapchain_format: Vk::Format,
+        swapchain_extent: Vk::Extent2D,
+        renderpass: &Vk::RenderPass,
+    ) -> VkResult<(Vec<Vk::Image>, Vec<Vk::ImageView>, Vec<Vk::Framebuffer>)> {
+        let images = unsafe { swapchain_khr.get_swapchain_images(*swapchain) }?;
+        let mut views = vec![];
+        let mut fbs = vec![];
+        images.iter().try_for_each(|image| {
+            let subresource = Vk::ImageSubresourceRange::builder()
+                .base_array_layer(0)
+                .layer_count(1)
+                .base_mip_level(0)
+                .level_count(1)
+                .aspect_mask(Vk::ImageAspectFlags::COLOR)
+                .build();
+            let view_info = Vk::ImageViewCreateInfo::builder()
+                .image(*image)
+                .view_type(Vk::ImageViewType::TYPE_2D)
+                .format(swapchain_format)
+                .components(Vk::ComponentMapping::default())
+                .subresource_range(subresource);
+            let view = unsafe { [device.create_image_view(&view_info, None)?] };
+            let fb_info = Vk::FramebufferCreateInfo::builder()
+                .render_pass(*renderpass)
+                .attachments(&view)
+                .width(swapchain_extent.width)
+                .height(swapchain_extent.height)
+                .layers(1);
+            let fb = unsafe { device.create_framebuffer(&fb_info, None) }?;
+            views.push(view[0]);
+            fbs.push(fb);
+            VkResult::Ok(())
+        })?;
+        Ok((images, views, fbs))
     }
 }

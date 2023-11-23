@@ -30,6 +30,12 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            for fb in self.device.swapchain_fbs.iter() {
+                self.device.device.destroy_framebuffer(*fb, None);
+            }
+            for view in self.device.swapchain_views.iter() {
+                self.device.device.destroy_image_view(*view, None);
+            }
             self.device
                 .device
                 .destroy_render_pass(self.device.renderpass, None);
