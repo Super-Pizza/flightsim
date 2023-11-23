@@ -3,6 +3,7 @@ pub struct AppDevice {
     pub device: ash::Device,
     pub swapchain_khr: khr::Swapchain,
     pub swapchain: Vk::SwapchainKHR,
+    pub renderpass: Vk::RenderPass,
 }
 impl AppDevice {
     pub fn new(base: &base::AppBase) -> Result<Self, String> {
@@ -37,10 +38,12 @@ impl AppDevice {
             swapchain_extent,
         )
         .map_err(e)?;
+        let renderpass = Self::create_renderpass(&device, swapchain_format.format).map_err(e)?;
         Ok(Self {
             device,
             swapchain_khr,
             swapchain,
+            renderpass,
         })
     }
     fn get_swapchain_format(
@@ -102,5 +105,41 @@ impl AppDevice {
             .present_mode(present_mode)
             .clipped(true);
         unsafe { swapchain_khr.create_swapchain(&swapchain_info, None) }
+    }
+    fn create_renderpass(
+        device: &ash::Device,
+        swapchain_format: Vk::Format,
+    ) -> VkResult<Vk::RenderPass> {
+        let attachments = [Vk::AttachmentDescription::builder()
+            .format(swapchain_format)
+            .samples(Vk::SampleCountFlags::TYPE_1)
+            .load_op(Vk::AttachmentLoadOp::CLEAR)
+            .store_op(Vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(Vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(Vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(Vk::ImageLayout::UNDEFINED)
+            .final_layout(Vk::ImageLayout::PRESENT_SRC_KHR)
+            .build()];
+        let color_attachments = [Vk::AttachmentReference::builder()
+            .attachment(0)
+            .layout(Vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
+        let subpasses = [Vk::SubpassDescription::builder()
+            .pipeline_bind_point(Vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachments)
+            .build()];
+        let dependencies = [Vk::SubpassDependency::builder()
+            .src_subpass(0)
+            .dst_subpass(Vk::SUBPASS_EXTERNAL)
+            .src_stage_mask(Vk::PipelineStageFlags::FRAGMENT_SHADER)
+            .dst_stage_mask(Vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(Vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(Vk::AccessFlags::COLOR_ATTACHMENT_READ)
+            .build()];
+        let renderpass_info = Vk::RenderPassCreateInfo::builder()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+        unsafe { device.create_render_pass(&renderpass_info, None) }
     }
 }

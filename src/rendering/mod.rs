@@ -31,6 +31,9 @@ impl Drop for App {
     fn drop(&mut self) {
         unsafe {
             self.device
+                .device
+                .destroy_render_pass(self.device.renderpass, None);
+            self.device
                 .swapchain_khr
                 .destroy_swapchain(self.device.swapchain, None);
             self.device.device.destroy_device(None);
