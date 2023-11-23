@@ -1,6 +1,7 @@
 use super::*;
 pub struct AppDevice {
     pub device: ash::Device,
+    pub queue: Vk::Queue,
     pub swapchain_khr: khr::Swapchain,
     pub swapchain: Vk::SwapchainKHR,
     pub renderpass: Vk::RenderPass,
@@ -24,6 +25,7 @@ impl AppDevice {
                 .create_device(base.physical_device, &device_info, None)
         }
         .map_err(e)?;
+        let queue = unsafe { device.get_device_queue(base.qu_idx, 0) };
         let swapchain_format =
             Self::get_swapchain_format(&base.surface_khr, &base.surface, &base.physical_device)
                 .map_err(e)?;
@@ -54,13 +56,14 @@ impl AppDevice {
         .map_err(e)?;
         Ok(Self {
             device,
+            queue,
             swapchain_khr,
             swapchain,
             renderpass,
             swapchain_images,
             swapchain_views,
             swapchain_fbs,
-            swapchain_extent
+            swapchain_extent,
         })
     }
     fn get_swapchain_format(

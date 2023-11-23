@@ -1,5 +1,6 @@
 mod base;
 mod device;
+mod main_loop;
 mod pipeline;
 mod runtime;
 
@@ -42,6 +43,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         unsafe {
+            self.device.device.device_wait_idle();
             for fence in self.runtime.render_finished_fences.iter() {
                 self.device.device.destroy_fence(*fence, None);
             }
@@ -193,4 +195,25 @@ unsafe extern "system" fn message_callback(
     lock.write_all(object_infos.as_bytes()).unwrap_or(());
     lock.flush().unwrap_or(());
     Vk::TRUE
+}
+
+pub fn srgb_expand(f: [f32; 4]) -> [f32; 4] {
+    [
+        if f[0] <= 0.04045 {
+            f[0] / 12.92
+        } else {
+            ((f[0] + 0.055) / 1.055).powf(2.4)
+        },
+        if f[1] <= 0.04045 {
+            f[1] / 12.92
+        } else {
+            ((f[1] + 0.055) / 1.055).powf(2.4)
+        },
+        if f[2] <= 0.04045 {
+            f[2] / 12.92
+        } else {
+            ((f[2] + 0.055) / 1.055).powf(2.4)
+        },
+        f[3],
+    ]
 }

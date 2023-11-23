@@ -2,7 +2,7 @@ mod rendering;
 use crate::rendering::App;
 fn main() {
     match App::new() {
-        Ok(_a) => println!("Success! Exiting."),
+        Ok(mut a) => a.run().unwrap(),
         Err(e) => {
             println!(
                 "Failed to initialize Vulkan!

@@ -5,6 +5,8 @@ pub struct AppRuntime {
     pub image_available_semaphores: Vec<Vk::Semaphore>,
     pub render_finished_semaphores: Vec<Vk::Semaphore>,
     pub render_finished_fences: Vec<Vk::Fence>,
+    pub swapchain_ok: bool,
+    pub current_frame: usize,
 }
 impl AppRuntime {
     pub fn new(base: &base::AppBase, device: &device::AppDevice) -> Result<Self, String> {
@@ -49,6 +51,8 @@ impl AppRuntime {
             image_available_semaphores,
             render_finished_semaphores,
             render_finished_fences,
+            current_frame: 0,
+            swapchain_ok: true,
         })
     }
 }
