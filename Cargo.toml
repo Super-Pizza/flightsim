@@ -27,7 +27,7 @@ lto = "thin"
 strip = true
 
 [profile.dev]
-opt-level = 0
+opt-level = 1
 lto = false
 
 [profile.production]
