@@ -103,8 +103,8 @@ impl AppPipeline {
             .alpha_to_coverage_enable(false)
             .alpha_to_one_enable(false);
         let depth_stencil = Vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(false)
-            .depth_write_enable(false)
+            .depth_test_enable(true)
+            .depth_write_enable(true)
             .depth_compare_op(Vk::CompareOp::LESS)
             .depth_bounds_test_enable(false)
             .stencil_test_enable(false)

@@ -131,11 +131,19 @@ impl App {
             offset: Vk::Offset2D { x: 0, y: 0 },
             extent: self.device.swapchain_extent,
         };
-        let clear_values = [Vk::ClearValue {
-            color: Vk::ClearColorValue {
-                float32: srgb_expand([0.3921569f32, 0.58431375f32, 0.9294119f32, 1.]),
+        let clear_values = [
+            Vk::ClearValue {
+                color: Vk::ClearColorValue {
+                    float32: srgb_expand([0.3921569f32, 0.58431375f32, 0.9294119f32, 1.]),
+                },
             },
-        }];
+            Vk::ClearValue {
+                depth_stencil: Vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
         let render_pass_begin_info = Vk::RenderPassBeginInfo::builder()
             .render_pass(self.device.renderpass)
             .framebuffer(self.device.swapchain_fbs[image_index])
@@ -203,28 +211,53 @@ impl App {
         self.device.swapchain_format = current_image_format;
         self.device.swapchain_extent = swapchain_extent;
         if redo_renderpass {
-            let renderpass =
-                device::AppDevice::create_renderpass(device, self.device.swapchain_format.format)
-                    .unwrap();
-            self.device.renderpass = renderpass;
-        }
-        let (swapchain_images, swapchain_views, swapchain_fbs) =
-            device::AppDevice::get_swapchain_images(
+            let renderpass = device::AppDevice::create_renderpass(
                 device,
-                &self.device.swapchain_khr,
-                &self.device.swapchain,
                 self.device.swapchain_format.format,
-                self.device.swapchain_extent,
-                &self.device.renderpass,
+                self.device.depth_format,
             )
             .unwrap();
+            self.device.renderpass = renderpass;
+        }
+        let swapchain_images =
+            unsafe { self.device.swapchain_khr.get_swapchain_images(swapchain) }.unwrap();
+        let (depth_images, depth_views, depth_image_allocs) =
+            device::AppDevice::create_depth_images(
+                device,
+                &self.device.allocator,
+                self.device.depth_format,
+                swapchain_extent,
+                self.device.swapchain_images.len(),
+                self.base.qu_idx,
+            )
+            .unwrap();
+        self.device.depth_images = depth_images;
+        self.device.depth_views = depth_views;
+        self.device.depth_image_allocs = depth_image_allocs;
+        let (swapchain_views, swapchain_fbs) = device::AppDevice::get_swapchain_images(
+            device,
+            &swapchain_images,
+            self.device.swapchain_format.format,
+            self.device.swapchain_extent,
+            &self.device.depth_views,
+            &self.device.renderpass,
+        )
+        .unwrap();
         self.device.swapchain_images = swapchain_images;
         self.device.swapchain_views = swapchain_views;
         self.device.swapchain_fbs = swapchain_fbs;
+
         self.runtime.swapchain_ok = true;
     }
     pub fn cleanup_swapchain(&mut self, redo_renderpass: bool) {
         let device = &self.device.device;
+        for image_view in self.device.depth_views.iter() {
+            unsafe { device.destroy_image_view(*image_view, None) }
+        }
+        for image in self.device.depth_images.iter() {
+            unsafe { device.destroy_image(*image, None) }
+        }
+        unsafe { self.device.allocator.cleanup(device) };
         for framebuffer in &self.device.swapchain_fbs {
             unsafe { device.destroy_framebuffer(*framebuffer, None) }
         }

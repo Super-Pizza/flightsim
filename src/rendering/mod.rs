@@ -19,6 +19,8 @@ pub fn e(e: Vk::Result) -> String {
     e.to_string()
 }
 
+type Alloc = vk_alloc::Allocation<Lifetime>;
+
 pub struct App {
     pub base: base::AppBase,
     pub device: device::AppDevice,
@@ -209,3 +211,9 @@ pub fn srgb_expand(f: [f32; 4]) -> [f32; 4] {
         f[3],
     ]
 }
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub enum Lifetime {
+    DepthStencil,
+}
+impl vk_alloc::Lifetime for Lifetime {}
