@@ -18,7 +18,7 @@ impl AppRuntime {
             .queue_family_index(base.qu_idx);
         let command_pool =
             unsafe { device.device.create_command_pool(&pool_info, None) }.map_err(e)?;
-        let num_frames = device.swapchain_images.len();
+        let num_frames = device.swapchain_images.images.len();
         let alloc_info = Vk::CommandBufferAllocateInfo::builder()
             .command_pool(command_pool)
             .command_buffer_count(num_frames as u32)

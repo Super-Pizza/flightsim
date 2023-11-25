@@ -5,16 +5,18 @@ pub struct AppDevice {
     pub queue: Vk::Queue,
     pub swapchain_khr: khr::Swapchain,
     pub swapchain: Vk::SwapchainKHR,
-    pub swapchain_format: Vk::SurfaceFormatKHR,
     pub renderpass: Vk::RenderPass,
-    pub swapchain_images: Vec<Vk::Image>,
-    pub swapchain_views: Vec<Vk::ImageView>,
-    pub swapchain_fbs: Vec<Vk::Framebuffer>,
-    pub depth_images: Vec<Vk::Image>,
-    pub depth_views: Vec<Vk::ImageView>,
+    pub swapchain_images: RenderImages,
+    pub depth_images: RenderImages,
     pub depth_image_allocs: Vec<Alloc>,
-    pub depth_format: Vk::Format,
+    pub framebuffers: Vec<Vk::Framebuffer>,
     pub swapchain_extent: Vk::Extent2D,
+}
+
+pub struct RenderImages {
+    pub images: Vec<Vk::Image>,
+    pub views: Vec<Vk::ImageView>,
+    pub format: Vk::Format,
 }
 impl AppDevice {
     pub fn new(base: &base::AppBase) -> Result<Self, String> {
@@ -68,11 +70,12 @@ impl AppDevice {
                 depth_format = Some(format)
             }
         }
-        let depth_format = depth_format.ok_or(String::from("No Depth Format found!"))?;
-        let renderpass =
-            Self::create_renderpass(&device, swapchain_format.format, depth_format).map_err(e)?;
         let swapchain_images =
             unsafe { swapchain_khr.get_swapchain_images(swapchain) }.map_err(e)?;
+        let swapchain_views =
+            Self::get_swapchain_images(&device, &swapchain_images, swapchain_format.format)
+                .map_err(e)?;
+        let depth_format = depth_format.ok_or(String::from("No Depth Format found!"))?;
         let (depth_images, depth_views, depth_image_allocs) = Self::create_depth_images(
             &device,
             &allocator,
@@ -82,30 +85,37 @@ impl AppDevice {
             base.qu_idx,
         )
         .map_err(e)?;
-        let (swapchain_views, swapchain_fbs) = Self::get_swapchain_images(
+        let renderpass =
+            Self::create_renderpass(&device, swapchain_format.format, depth_format).map_err(e)?;
+        let framebuffers = Self::create_framebuffer(
             &device,
-            &swapchain_images,
-            swapchain_format.format,
-            swapchain_extent,
+            &swapchain_views,
             &depth_views,
             &renderpass,
+            swapchain_extent,
         )
         .map_err(e)?;
+        let swapchain_images = RenderImages {
+            images: swapchain_images,
+            views: swapchain_views,
+            format: swapchain_format.format,
+        };
+        let depth_images = RenderImages {
+            images: depth_images,
+            views: depth_views,
+            format: depth_format,
+        };
         Ok(Self {
             device,
             allocator,
             queue,
             swapchain_khr,
             swapchain,
-            swapchain_format,
             renderpass,
             swapchain_images,
-            swapchain_views,
-            swapchain_fbs,
+            framebuffers,
             depth_images,
-            depth_views,
             depth_image_allocs,
-            depth_format,
             swapchain_extent,
         })
     }
@@ -287,43 +297,46 @@ impl AppDevice {
         device: &ash::Device,
         images: &[Vk::Image],
         swapchain_format: Vk::Format,
-        swapchain_extent: Vk::Extent2D,
+    ) -> VkResult<Vec<Vk::ImageView>> {
+        images
+            .iter()
+            .map(|image| {
+                let subresource = Vk::ImageSubresourceRange {
+                    base_array_layer: 0,
+                    layer_count: 1,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    aspect_mask: Vk::ImageAspectFlags::COLOR,
+                };
+                let view_info = Vk::ImageViewCreateInfo::builder()
+                    .image(*image)
+                    .view_type(Vk::ImageViewType::TYPE_2D)
+                    .format(swapchain_format)
+                    .components(Vk::ComponentMapping::default())
+                    .subresource_range(subresource);
+                unsafe { device.create_image_view(&view_info, None) }
+            })
+            .collect::<VkResult<Vec<_>>>()
+    }
+    pub fn create_framebuffer(
+        device: &ash::Device,
+        swapchain_views: &[Vk::ImageView],
         depth_views: &[Vk::ImageView],
         renderpass: &Vk::RenderPass,
-    ) -> VkResult<(Vec<Vk::ImageView>, Vec<Vk::Framebuffer>)> {
-        let mut views = vec![];
+        swapchain_extent: Vk::Extent2D,
+    ) -> VkResult<Vec<Vk::Framebuffer>> {
         let mut fbs = vec![];
-        images.iter().enumerate().try_for_each(|(idx, image)| {
-            let subresource = Vk::ImageSubresourceRange::builder()
-                .base_array_layer(0)
-                .layer_count(1)
-                .base_mip_level(0)
-                .level_count(1)
-                .aspect_mask(Vk::ImageAspectFlags::COLOR)
-                .build();
-            let view_info = Vk::ImageViewCreateInfo::builder()
-                .image(*image)
-                .view_type(Vk::ImageViewType::TYPE_2D)
-                .format(swapchain_format)
-                .components(Vk::ComponentMapping::default())
-                .subresource_range(subresource);
-            let view = unsafe {
-                [
-                    device.create_image_view(&view_info, None)?,
-                    depth_views[idx],
-                ]
-            };
+        for view in swapchain_views.iter().zip(depth_views.iter()) {
+            let views = [*view.0, *view.1];
             let fb_info = Vk::FramebufferCreateInfo::builder()
                 .render_pass(*renderpass)
-                .attachments(&view)
+                .attachments(&views)
                 .width(swapchain_extent.width)
                 .height(swapchain_extent.height)
                 .layers(1);
             let fb = unsafe { device.create_framebuffer(&fb_info, None) }?;
-            views.push(view[0]);
             fbs.push(fb);
-            VkResult::Ok(())
-        })?;
-        Ok((views, fbs))
+        }
+        Ok(fbs)
     }
 }

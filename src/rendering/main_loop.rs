@@ -118,7 +118,7 @@ impl App {
                 }
             };
             self.runtime.current_frame =
-                (self.runtime.current_frame + 1) % self.device.swapchain_images.len();
+                (self.runtime.current_frame + 1) % self.device.swapchain_images.images.len();
         }
     }
     fn record_command_buffers(&mut self, index: usize, image_index: usize) {
@@ -146,7 +146,7 @@ impl App {
         ];
         let render_pass_begin_info = Vk::RenderPassBeginInfo::builder()
             .render_pass(self.device.renderpass)
-            .framebuffer(self.device.swapchain_fbs[image_index])
+            .framebuffer(self.device.framebuffers[image_index])
             .render_area(region)
             .clear_values(&clear_values);
         unsafe {
@@ -190,7 +190,7 @@ impl App {
             &self.base.physical_device,
         )
         .unwrap();
-        let redo_renderpass = self.device.swapchain_format != current_image_format;
+        let redo_renderpass = self.device.swapchain_images.format != current_image_format.format;
         self.cleanup_swapchain(redo_renderpass);
         let device = &self.device.device;
         let (swapchain, swapchain_extent) = device::AppDevice::create_swapchain(
@@ -208,63 +208,76 @@ impl App {
                 .destroy_swapchain(self.device.swapchain, None)
         };
         self.device.swapchain = swapchain;
-        self.device.swapchain_format = current_image_format;
         self.device.swapchain_extent = swapchain_extent;
-        if redo_renderpass {
-            let renderpass = device::AppDevice::create_renderpass(
-                device,
-                self.device.swapchain_format.format,
-                self.device.depth_format,
-            )
-            .unwrap();
-            self.device.renderpass = renderpass;
-        }
         let swapchain_images =
             unsafe { self.device.swapchain_khr.get_swapchain_images(swapchain) }.unwrap();
+        let swapchain_views = device::AppDevice::get_swapchain_images(
+            device,
+            &swapchain_images,
+            current_image_format.format,
+        )
+        .unwrap();
+        let depth_format = self.device.depth_images.format;
         let (depth_images, depth_views, depth_image_allocs) =
             device::AppDevice::create_depth_images(
                 device,
                 &self.device.allocator,
-                self.device.depth_format,
+                depth_format,
                 swapchain_extent,
-                self.device.swapchain_images.len(),
+                swapchain_images.len(),
                 self.base.qu_idx,
             )
             .unwrap();
-        self.device.depth_images = depth_images;
-        self.device.depth_views = depth_views;
-        self.device.depth_image_allocs = depth_image_allocs;
-        let (swapchain_views, swapchain_fbs) = device::AppDevice::get_swapchain_images(
+        if redo_renderpass {
+            let renderpass = device::AppDevice::create_renderpass(
+                device,
+                self.device.swapchain_images.format,
+                self.device.depth_images.format,
+            )
+            .unwrap();
+            self.device.renderpass = renderpass;
+        }
+        let framebuffers = device::AppDevice::create_framebuffer(
             device,
-            &swapchain_images,
-            self.device.swapchain_format.format,
-            self.device.swapchain_extent,
-            &self.device.depth_views,
+            &swapchain_views,
+            &depth_views,
             &self.device.renderpass,
+            swapchain_extent,
         )
         .unwrap();
+        let swapchain_images = device::RenderImages {
+            images: swapchain_images,
+            views: swapchain_views,
+            format: current_image_format.format,
+        };
+        let depth_images = device::RenderImages {
+            images: depth_images,
+            views: depth_views,
+            format: depth_format,
+        };
         self.device.swapchain_images = swapchain_images;
-        self.device.swapchain_views = swapchain_views;
-        self.device.swapchain_fbs = swapchain_fbs;
+        self.device.depth_images = depth_images;
+        self.device.depth_image_allocs = depth_image_allocs;
+        self.device.framebuffers = framebuffers;
 
         self.runtime.swapchain_ok = true;
     }
     pub fn cleanup_swapchain(&mut self, redo_renderpass: bool) {
         let device = &self.device.device;
-        for image_view in self.device.depth_views.iter() {
+        for image_view in self.device.depth_images.views.iter() {
             unsafe { device.destroy_image_view(*image_view, None) }
         }
-        for image in self.device.depth_images.iter() {
+        for image in self.device.depth_images.images.iter() {
             unsafe { device.destroy_image(*image, None) }
         }
         unsafe { self.device.allocator.cleanup(device) };
-        for framebuffer in &self.device.swapchain_fbs {
+        for framebuffer in &self.device.framebuffers {
             unsafe { device.destroy_framebuffer(*framebuffer, None) }
         }
         if redo_renderpass {
             unsafe { device.destroy_render_pass(self.device.renderpass, None) }
         }
-        for image_view in self.device.swapchain_views.iter() {
+        for image_view in self.device.swapchain_images.views.iter() {
             unsafe { device.destroy_image_view(*image_view, None) }
         }
     }
