@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{io::Cursor, mem::size_of};
 
 use super::*;
 
@@ -12,10 +12,12 @@ pub struct AppPipeline {
     pub pipeline_layout: Vk::PipelineLayout,
     pub pipeline_cache: Vk::PipelineCache,
     pub pipeline: Vk::Pipeline,
+    pub vertex_buffer: Vk::Buffer,
+    pub vertex_buffer_alloc: Alloc,
 }
 
 impl AppPipeline {
-    pub fn new(device: &device::AppDevice) -> Result<Self, String> {
+    pub fn new(device: &device::AppDevice, qu_idx: u32) -> Result<Self, String> {
         let vert_shader = Self::create_shader_module(
             &device.device,
             ash::util::read_spv(&mut Cursor::new(VERT_SHADER)).map_err(|e| e.to_string())?,
@@ -34,11 +36,15 @@ impl AppPipeline {
             device.swapchain_extent,
         )
         .map_err(e)?;
+        let (vertex_buffer, vertex_buffer_alloc) =
+            Self::create_vertex_buffer(&device.device, &device.allocator, qu_idx).map_err(e)?;
         Ok(Self {
             shaders,
             pipeline_layout,
             pipeline_cache,
             pipeline,
+            vertex_buffer,
+            vertex_buffer_alloc,
         })
     }
     pub fn create_shader_module(device: &ash::Device, spv: Vec<u32>) -> VkResult<Vk::ShaderModule> {
@@ -63,8 +69,7 @@ impl AppPipeline {
                 .name(CStr::from_bytes_with_nul(b"main\0").unwrap())
                 .build(),
         ];
-        let vertex_bindings = [];
-        let vertex_attributes = [];
+        let (vertex_bindings, vertex_attributes) = Vertex::get_attribute_binding_info();
         let vertex_input = Vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(&vertex_bindings)
             .vertex_attribute_descriptions(&vertex_attributes);
@@ -146,5 +151,83 @@ impl AppPipeline {
         let cache = unsafe { device.create_pipeline_cache(&cache_info, None) }?;
         let pipeline = unsafe { device.create_graphics_pipelines(cache, &pipeline_info, None) };
         Ok((layout, cache, pipeline.map_err(|e| e.1)?[0]))
+    }
+    fn create_vertex_buffer(
+        device: &ash::Device,
+        allocator: &vk_alloc::Allocator<Lifetime>,
+        qu_idx: u32,
+    ) -> VkResult<(Vk::Buffer, Alloc)> {
+        let qu_idx = [qu_idx];
+        let size = 3 * std::mem::size_of::<Vertex>();
+        let buffer_info = Vk::BufferCreateInfo::builder()
+            .size(size as _)
+            .usage(Vk::BufferUsageFlags::VERTEX_BUFFER)
+            .sharing_mode(Vk::SharingMode::EXCLUSIVE)
+            .queue_family_indices(&qu_idx);
+        let buffer = unsafe { device.create_buffer(&buffer_info, None) }?;
+        let mut alloc = unsafe {
+            allocator.allocate_memory_for_buffer(
+                device,
+                buffer,
+                vk_alloc::MemoryLocation::CpuToGpu,
+                Lifetime::Buffer,
+            )
+        }
+        .map_err(|_| Vk::Result::ERROR_UNKNOWN)?;
+        unsafe { device.bind_buffer_memory(buffer, alloc.device_memory(), alloc.offset()) }?;
+        let mapped_data = unsafe { alloc.mapped_slice_mut() }
+            .map_err(|_| Vk::Result::ERROR_UNKNOWN)?
+            .unwrap();
+        let data = [
+            Vertex {
+                pos: glam::Vec3::new(0.0, 0.5, 0.0),
+                color: [255, 0, 0, 0],
+            },
+            Vertex {
+                pos: glam::Vec3::new(0.5, -0.5, 0.0),
+                color: [0, 255, 0, 0],
+            },
+            Vertex {
+                pos: glam::Vec3::new(-0.5, -0.5, 0.0),
+                color: [0, 0, 255, 0],
+            },
+        ];
+        mapped_data.copy_from_slice(bytemuck::cast_slice(&data));
+        Ok((buffer, alloc))
+    }
+}
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, PartialEq)]
+#[repr(C)]
+pub struct Vertex {
+    pos: glam::Vec3,
+    color: [u8; 4],
+}
+
+impl Vertex {
+    fn get_attribute_binding_info() -> (
+        Vec<Vk::VertexInputBindingDescription>,
+        Vec<Vk::VertexInputAttributeDescription>,
+    ) {
+        let binding = vec![Vk::VertexInputBindingDescription::builder()
+            .binding(0)
+            .input_rate(Vk::VertexInputRate::VERTEX)
+            .stride(size_of::<Self>() as _)
+            .build()];
+        let attributes = vec![
+            Vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .format(Vk::Format::R32G32B32_SFLOAT)
+                .location(0)
+                .offset(0)
+                .build(),
+            Vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .format(Vk::Format::R8G8B8A8_UNORM)
+                .location(1)
+                .offset(size_of::<glam::Vec3>() as _)
+                .build(),
+        ];
+        (binding, attributes)
     }
 }

@@ -175,6 +175,14 @@ impl App {
             offset: Vk::Offset2D { x: 0, y: 0 },
             extent: self.device.swapchain_extent,
         };
+        unsafe {
+            device.cmd_bind_vertex_buffers(
+                self.runtime.command_buffers[index],
+                0,
+                &[self.pipeline.vertex_buffer],
+                &[0],
+            )
+        };
         unsafe { device.cmd_set_viewport(self.runtime.command_buffers[index], 0, &[viewport]) }
         unsafe { device.cmd_set_scissor(self.runtime.command_buffers[index], 0, &[scissor]) }
         unsafe { device.cmd_draw(self.runtime.command_buffers[index], 3, 1, 0, 0) }
@@ -270,7 +278,14 @@ impl App {
         for image in self.device.depth_images.images.iter() {
             unsafe { device.destroy_image(*image, None) }
         }
-        unsafe { self.device.allocator.cleanup(device) };
+        for allocation in self.device.depth_image_allocs.iter() {
+            unsafe {
+                self.device
+                    .allocator
+                    .deallocate(device, allocation)
+                    .unwrap()
+            };
+        }
         for framebuffer in &self.device.framebuffers {
             unsafe { device.destroy_framebuffer(*framebuffer, None) }
         }

@@ -31,7 +31,7 @@ impl App {
     pub fn new() -> Result<Self, String> {
         let base = base::AppBase::new()?;
         let device = device::AppDevice::new(&base)?;
-        let pipeline = pipeline::AppPipeline::new(&device)?;
+        let pipeline = pipeline::AppPipeline::new(&device, base.qu_idx)?;
         let runtime = runtime::AppRuntime::new(&base, &device)?;
         Ok(Self {
             base,
@@ -56,6 +56,10 @@ impl Drop for App {
             for semaphore in self.runtime.image_available_semaphores.iter() {
                 self.device.device.destroy_semaphore(*semaphore, None);
             }
+            self.device
+                .device
+                .destroy_buffer(self.pipeline.vertex_buffer, None);
+            self.device.allocator.cleanup(&self.device.device);
             self.device
                 .device
                 .reset_command_pool(
@@ -215,5 +219,6 @@ pub fn srgb_expand(f: [f32; 4]) -> [f32; 4] {
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum Lifetime {
     DepthStencil,
+    Buffer,
 }
 impl vk_alloc::Lifetime for Lifetime {}
