@@ -1,6 +1,10 @@
 use std::{env, fs::read_dir, path::PathBuf, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=src/shaders/");
+    println!(
+        "cargo:rustc-env=TARGET={}",
+        std::env::var("TARGET").unwrap()
+    );
     let root_dir = &env::var("CARGO_MANIFEST_DIR").unwrap();
     let mut shader_dir = PathBuf::from(root_dir);
     shader_dir.push("src/shaders");
