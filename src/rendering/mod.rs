@@ -47,45 +47,37 @@ impl Drop for App {
         unsafe {
             self.device.device.device_wait_idle().unwrap_or(());
             self.cleanup_swapchain(true);
+            let device = &mut self.device.device;
             for fence in self.runtime.render_finished_fences.iter() {
-                self.device.device.destroy_fence(*fence, None);
+                device.destroy_fence(*fence, None);
             }
             for semaphore in self.runtime.render_finished_semaphores.iter() {
-                self.device.device.destroy_semaphore(*semaphore, None);
+                device.destroy_semaphore(*semaphore, None);
             }
             for semaphore in self.runtime.image_available_semaphores.iter() {
-                self.device.device.destroy_semaphore(*semaphore, None);
+                device.destroy_semaphore(*semaphore, None);
             }
-            self.device
-                .device
-                .destroy_buffer(self.pipeline.vertex_buffer, None);
-            self.device.allocator.cleanup(&self.device.device);
-            self.device
-                .device
+            device.destroy_buffer(self.pipeline.vertex_buffer, None);
+            self.device.allocator.cleanup(device);
+            device
                 .reset_command_pool(
                     self.runtime.command_pool,
                     Vk::CommandPoolResetFlags::RELEASE_RESOURCES,
                 )
                 .unwrap();
-            self.device
-                .device
-                .destroy_command_pool(self.runtime.command_pool, None);
-            self.device
-                .device
-                .destroy_pipeline(self.pipeline.pipeline, None);
-            self.device
-                .device
-                .destroy_pipeline_layout(self.pipeline.pipeline_layout, None);
-            self.device
-                .device
-                .destroy_pipeline_cache(self.pipeline.pipeline_cache, None);
+            device.destroy_command_pool(self.runtime.command_pool, None);
+            device.destroy_pipeline(self.pipeline.pipeline, None);
+
+            device.destroy_pipeline_layout(self.pipeline.pipeline_layout, None);
+
+            device.destroy_pipeline_cache(self.pipeline.pipeline_cache, None);
             for shader in self.pipeline.shaders {
-                self.device.device.destroy_shader_module(shader, None);
+                device.destroy_shader_module(shader, None);
             }
             self.device
                 .swapchain_khr
                 .destroy_swapchain(self.device.swapchain, None);
-            self.device.device.destroy_device(None);
+            device.destroy_device(None);
             self.base
                 .surface_khr
                 .destroy_surface(self.base.surface, None);
