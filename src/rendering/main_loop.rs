@@ -7,7 +7,7 @@ impl App {
                 win.set_control_flow(winit::event_loop::ControlFlow::Poll);
                 match ev {
                     winit::event::Event::WindowEvent { event, .. } => match event {
-                        winit::event::WindowEvent::Resized(_) => self.resize(),
+                        winit::event::WindowEvent::Resized(size) => self.resize(size),
                         winit::event::WindowEvent::CloseRequested => win.exit(),
                         //winit::event::WindowEvent::Destroyed => todo!(),
                         //winit::event::WindowEvent::Focused(_) => todo!(),
@@ -190,7 +190,7 @@ impl App {
         unsafe { device.end_command_buffer(self.runtime.command_buffers[index]) }.unwrap();
     }
     #[cold]
-    fn resize(&mut self) {
+    fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         unsafe { self.device.device.device_wait_idle() }.unwrap();
         let current_image_format = device::AppDevice::get_swapchain_format(
             &self.base.surface_khr,
@@ -201,22 +201,21 @@ impl App {
         let redo_renderpass = self.device.swapchain_images.format != current_image_format.format;
         self.cleanup_swapchain(redo_renderpass);
         let device = &self.device.device;
-        let (swapchain, swapchain_extent) = device::AppDevice::create_swapchain(
+        let swapchain = device::AppDevice::create_swapchain(
             &self.device.swapchain_khr,
             &self.base.surface_khr,
             self.base.surface,
             self.base.qu_idx,
             &self.base.physical_device,
             current_image_format,
+            size,
         )
         .unwrap();
-        unsafe {
-            self.device
-                .swapchain_khr
-                .destroy_swapchain(self.device.swapchain, None)
-        };
         self.device.swapchain = swapchain;
-        self.device.swapchain_extent = swapchain_extent;
+        self.device.swapchain_extent = Vk::Extent2D {
+            width: size.width,
+            height: size.height,
+        };
         let swapchain_images =
             unsafe { self.device.swapchain_khr.get_swapchain_images(swapchain) }.unwrap();
         let swapchain_views = device::AppDevice::get_swapchain_images(
@@ -231,7 +230,7 @@ impl App {
                 device,
                 &self.device.allocator,
                 depth_format,
-                swapchain_extent,
+                self.device.swapchain_extent,
                 swapchain_images.len(),
                 self.base.qu_idx,
             )
@@ -250,7 +249,7 @@ impl App {
             &swapchain_views,
             &depth_views,
             &self.device.renderpass,
-            swapchain_extent,
+            self.device.swapchain_extent,
         )
         .unwrap();
         let swapchain_images = device::RenderImages {
@@ -278,6 +277,11 @@ impl App {
         for image in self.device.depth_images.images.iter() {
             unsafe { device.destroy_image(*image, None) }
         }
+        unsafe {
+            self.device
+                .swapchain_khr
+                .destroy_swapchain(self.device.swapchain, None)
+        };
         for allocation in self.device.depth_image_allocs.iter() {
             unsafe {
                 self.device

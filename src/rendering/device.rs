@@ -46,13 +46,19 @@ impl AppDevice {
             Self::get_swapchain_format(&base.surface_khr, &base.surface, &base.physical_device)
                 .map_err(e)?;
         let swapchain_khr = khr::Swapchain::new(&base.instance, &device);
-        let (swapchain, swapchain_extent) = Self::create_swapchain(
+        let size = base.window.inner_size();
+        let swapchain_extent = Vk::Extent2D {
+            width: size.width,
+            height: size.height,
+        };
+        let swapchain = Self::create_swapchain(
             &swapchain_khr,
             &base.surface_khr,
             base.surface,
             base.qu_idx,
             &base.physical_device,
             swapchain_format,
+            size,
         )
         .map_err(e)?;
         let mut depth_format = None;
@@ -143,7 +149,8 @@ impl AppDevice {
         qu_idx: u32,
         physical_device: &Vk::PhysicalDevice,
         format: Vk::SurfaceFormatKHR,
-    ) -> VkResult<(Vk::SwapchainKHR, Vk::Extent2D)> {
+        size: winit::dpi::PhysicalSize<u32>,
+    ) -> VkResult<Vk::SwapchainKHR> {
         let properties = unsafe {
             surface_khr.get_physical_device_surface_capabilities(*physical_device, surface)
         }?;
@@ -167,7 +174,10 @@ impl AppDevice {
             .min_image_count(image_count)
             .image_format(format.format)
             .image_color_space(format.color_space)
-            .image_extent(properties.current_extent)
+            .image_extent(Vk::Extent2D {
+                width: size.width,
+                height: size.height,
+            })
             .image_array_layers(1)
             .image_usage(Vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(Vk::SharingMode::EXCLUSIVE)
@@ -177,7 +187,7 @@ impl AppDevice {
             .present_mode(present_mode)
             .clipped(true);
         let swapchain = unsafe { swapchain_khr.create_swapchain(&swapchain_info, None) }?;
-        Ok((swapchain, properties.current_extent))
+        Ok(swapchain)
     }
     pub fn create_depth_images(
         device: &ash::Device,

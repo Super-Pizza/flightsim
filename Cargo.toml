@@ -23,6 +23,7 @@ ash = "0.37"
 ash-window = "0.12"
 winit = { version = "0.29.3", features = [
     "rwh_05",
+    "wayland",
     "x11",
 ], default-features = false }
 raw-window-handle = "0.5.2"

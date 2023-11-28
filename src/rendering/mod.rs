@@ -74,9 +74,6 @@ impl Drop for App {
             for shader in self.pipeline.shaders {
                 device.destroy_shader_module(shader, None);
             }
-            self.device
-                .swapchain_khr
-                .destroy_swapchain(self.device.swapchain, None);
             device.destroy_device(None);
             self.base
                 .surface_khr
