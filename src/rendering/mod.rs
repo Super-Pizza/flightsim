@@ -3,7 +3,11 @@ mod device;
 mod main_loop;
 mod pipeline;
 mod runtime;
-
+#[cfg(feature = "profiling")]
+#[macro_use]
+mod tracy;
+#[cfg(feature = "profiling")]
+use crate::span;
 use std::ffi::CStr;
 #[cfg(feature = "debuginfo")]
 use std::{io::Write, os::raw::c_void};
@@ -22,6 +26,8 @@ pub fn e(e: Vk::Result) -> String {
 type Alloc = vk_alloc::Allocation<Lifetime>;
 
 pub struct App {
+    #[cfg(feature = "profiling")]
+    pub client: profiling::Client,
     pub base: base::AppBase,
     pub device: device::AppDevice,
     pub pipeline: pipeline::AppPipeline,
@@ -29,11 +35,15 @@ pub struct App {
 }
 impl App {
     pub fn new() -> Result<Self, String> {
+        #[cfg(feature = "profiling")]
+        let client = profiling::Client::start();
         let base = base::AppBase::new()?;
         let device = device::AppDevice::new(&base)?;
         let pipeline = pipeline::AppPipeline::new(&device, base.qu_idx)?;
         let runtime = runtime::AppRuntime::new(&base, &device)?;
         Ok(Self {
+            #[cfg(feature = "profiling")]
+            client,
             base,
             device,
             pipeline,
@@ -48,6 +58,8 @@ impl Drop for App {
             self.device.device.device_wait_idle().unwrap_or(());
             self.cleanup_swapchain(true);
             let device = &mut self.device.device;
+            #[cfg(feature = "profiling")]
+            device.destroy_query_pool(self.runtime.gpu_timestamps, None);
             for fence in self.runtime.render_finished_fences.iter() {
                 device.destroy_fence(*fence, None);
             }

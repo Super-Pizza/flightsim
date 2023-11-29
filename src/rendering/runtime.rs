@@ -1,3 +1,6 @@
+#[cfg(feature = "profiling")]
+use std::{cell::OnceCell, iter};
+
 use super::*;
 pub struct AppRuntime {
     pub command_pool: Vk::CommandPool,
@@ -7,6 +10,12 @@ pub struct AppRuntime {
     pub render_finished_fences: Vec<Vk::Fence>,
     pub swapchain_ok: bool,
     pub current_frame: usize,
+    #[cfg(feature = "profiling")]
+    pub gpu_spans: Vec<Option<profiling::GpuSpan>>,
+    #[cfg(feature = "profiling")]
+    pub gpu_timestamps: Vk::QueryPool,
+    #[cfg(feature = "profiling")]
+    pub gpu_context: OnceCell<profiling::GpuContext>,
 }
 impl AppRuntime {
     pub fn new(base: &base::AppBase, device: &device::AppDevice) -> Result<Self, String> {
@@ -44,7 +53,16 @@ impl AppRuntime {
                 .take(num_frames)
                 .collect::<VkResult<Vec<_>>>()
                 .map_err(e)?;
-
+        #[cfg(feature = "profiling")]
+        let gpu_timestamps = unsafe {
+            device.device.create_query_pool(
+                &Vk::QueryPoolCreateInfo::builder()
+                    .query_type(Vk::QueryType::TIMESTAMP)
+                    .query_count(2 * num_frames as u32),
+                None,
+            )
+        }
+        .map_err(e)?;
         Ok(Self {
             command_pool,
             command_buffers,
@@ -53,6 +71,12 @@ impl AppRuntime {
             render_finished_fences,
             current_frame: 0,
             swapchain_ok: true,
+            #[cfg(feature = "profiling")]
+            gpu_spans: iter::repeat_with(|| None).take(num_frames).collect(),
+            #[cfg(feature = "profiling")]
+            gpu_timestamps,
+            #[cfg(feature = "profiling")]
+            gpu_context: OnceCell::new(),
         })
     }
 }

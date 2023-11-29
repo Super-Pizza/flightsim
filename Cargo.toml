@@ -30,6 +30,15 @@ raw-window-handle = "0.5.2"
 vk-alloc = { path = "src/rendering/vk_alloc" }
 glam = { version = "0.24", features = ["bytemuck"] }
 bytemuck = { version = "1.14", features = ["derive"] }
+profiling = { version = "0.16.4", optional = true, default-features = false, features = [
+    "enable",
+    "system-tracing",
+    "context-switch-tracing",
+    "sampling",
+    "code-transfer",
+    "only-localhost",
+    "callstack-inlines",
+], package = "tracy-client" }
 
 [profile.release]
 opt-level = 2

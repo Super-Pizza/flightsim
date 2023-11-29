@@ -1,6 +1,7 @@
 use super::*;
 impl App {
     pub fn run(&mut self) -> Result<(), String> {
+        let mut first_frame = true;
         let ev_loop = self.base.event_loop.take().unwrap();
         ev_loop
             .run(|ev, win| {
@@ -18,7 +19,12 @@ impl App {
                     //winit::event::Event::Suspended => todo!(),
                     //winit::event::Event::Resumed => todo!(),
                     winit::event::Event::NewEvents(winit::event::StartCause::Poll) => {
-                        self.draw_frame()
+                        if first_frame {
+                            #[cfg(feature = "profiling")]
+                            self.first_frame_setup();
+                        }
+                        self.draw_frame();
+                        first_frame = false;
                     }
                     _ => {}
                 }
@@ -27,6 +33,8 @@ impl App {
     }
     fn draw_frame(&mut self) {
         let image_index = {
+            #[cfg(feature = "profiling")]
+            let _a = span!(profiling::span_location!("Acquire Image"));
             let device = &mut self.device.device;
             let mut image_index = 0;
             if self.runtime.swapchain_ok {
@@ -75,6 +83,21 @@ impl App {
             .unwrap();
             image_index
         };
+        #[cfg(feature = "profiling")]
+        if let Some(span) = self.runtime.gpu_spans[self.runtime.current_frame].take() {
+            let mut buf = [0i64; 2];
+            unsafe {
+                self.device.device.get_query_pool_results(
+                    self.runtime.gpu_timestamps,
+                    self.runtime.current_frame as u32 * 2,
+                    2,
+                    &mut buf,
+                    Vk::QueryResultFlags::TYPE_64,
+                )
+            }
+            .unwrap();
+            span.upload_timestamp(buf[0], buf[1]);
+        }
         self.record_command_buffers(self.runtime.current_frame, image_index as usize);
         let render_finished_semaphore =
             [self.runtime.render_finished_semaphores[self.runtime.current_frame]];
@@ -95,6 +118,8 @@ impl App {
             .signal_semaphores(&render_finished_semaphore)
             .build()];
         {
+            #[cfg(feature = "profiling")]
+            let _a = span!(profiling::span_location!("Query Submit"));
             let device = &mut self.device.device;
             unsafe {
                 device.queue_submit(
@@ -119,14 +144,39 @@ impl App {
             };
             self.runtime.current_frame =
                 (self.runtime.current_frame + 1) % self.device.swapchain_images.images.len();
+            #[cfg(feature = "profiling")]
+            self.client.frame_mark();
         }
     }
     fn record_command_buffers(&mut self, index: usize, image_index: usize) {
+        #[cfg(feature = "profiling")]
+        let _a = span!(profiling::span_location!("Commands start"));
         let device = &mut self.device.device;
         let begin_info = Vk::CommandBufferBeginInfo::builder()
             .flags(Vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         let cb = self.runtime.command_buffers[index];
         unsafe { device.begin_command_buffer(cb, &begin_info) }.unwrap();
+        #[cfg(feature = "profiling")]
+        unsafe {
+            device.cmd_reset_query_pool(cb, self.runtime.gpu_timestamps, index as u32 * 2, 2);
+            device.cmd_write_timestamp(
+                cb,
+                Vk::PipelineStageFlags::TOP_OF_PIPE,
+                self.runtime.gpu_timestamps,
+                index as u32 * 2,
+            )
+        }
+        #[cfg(feature = "profiling")]
+        {
+            let span = self
+                .runtime
+                .gpu_context
+                .get()
+                .unwrap()
+                .span(profiling::span_location!("Rendering"))
+                .unwrap();
+            self.runtime.gpu_spans[index] = Some(span)
+        }
         let region = Vk::Rect2D {
             offset: Vk::Offset2D { x: 0, y: 0 },
             extent: self.device.swapchain_extent,
@@ -187,10 +237,82 @@ impl App {
         unsafe { device.cmd_set_scissor(self.runtime.command_buffers[index], 0, &[scissor]) }
         unsafe { device.cmd_draw(self.runtime.command_buffers[index], 3, 1, 0, 0) }
         unsafe { device.cmd_end_render_pass(self.runtime.command_buffers[index]) }
+        #[cfg(feature = "profiling")]
+        unsafe {
+            device.cmd_write_timestamp(
+                cb,
+                Vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                self.runtime.gpu_timestamps,
+                index as u32 * 2 + 1,
+            )
+        }
+        #[cfg(feature = "profiling")]
+        {
+            self.runtime.gpu_spans[index].as_mut().unwrap().end_zone()
+        }
         unsafe { device.end_command_buffer(self.runtime.command_buffers[index]) }.unwrap();
+    }
+    #[cfg(feature = "profiling")]
+    fn first_frame_setup(&mut self) {
+        let device = &mut self.device.device;
+        let query_pool_info = Vk::QueryPoolCreateInfo::builder()
+            .query_type(Vk::QueryType::TIMESTAMP)
+            .query_count(1);
+        let query_pool = unsafe { device.create_query_pool(&query_pool_info, None) }.unwrap();
+        let fence = unsafe { device.create_fence(&Vk::FenceCreateInfo::builder(), None) }.unwrap();
+        let begin_info = Vk::CommandBufferBeginInfo::builder()
+            .flags(Vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        let cb = self.runtime.command_buffers[0];
+        unsafe { device.begin_command_buffer(cb, &begin_info) }.unwrap();
+        unsafe { device.cmd_reset_query_pool(cb, query_pool, 0, 1) };
+        unsafe {
+            device.cmd_write_timestamp(cb, Vk::PipelineStageFlags::ALL_COMMANDS, query_pool, 0)
+        }
+        unsafe { device.end_command_buffer(cb) }.unwrap();
+        let cb = [cb];
+        let submit_info = [Vk::SubmitInfo::builder()
+            .wait_semaphores(&[])
+            .wait_dst_stage_mask(&[])
+            .command_buffers(&cb)
+            .signal_semaphores(&[])
+            .build()];
+        unsafe { device.queue_submit(self.device.queue, &submit_info, fence) }.unwrap();
+        unsafe { device.wait_for_fences(&[fence], true, u64::MAX) }.unwrap();
+        unsafe { device.reset_fences(&[fence]) }.unwrap();
+        let mut data = [0];
+        unsafe {
+            device.get_query_pool_results::<i64>(
+                query_pool,
+                0,
+                1,
+                &mut data,
+                Vk::QueryResultFlags::TYPE_64,
+            )
+        }
+        .unwrap();
+        let gpu_context = profiling::Client::running()
+            .unwrap()
+            .new_gpu_context(
+                Some("Main"),
+                profiling::GpuContextType::Vulkan,
+                data[0],
+                unsafe {
+                    self.base
+                        .instance
+                        .get_physical_device_properties(self.base.physical_device)
+                        .limits
+                        .timestamp_period
+                },
+            )
+            .unwrap();
+        self.runtime.gpu_context.set(gpu_context).unwrap_or(());
+        unsafe { self.device.device.destroy_fence(fence, None) };
+        unsafe { self.device.device.destroy_query_pool(query_pool, None) };
     }
     #[cold]
     fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        #[cfg(feature = "profiling")]
+        let _a = span!(profiling::span_location!("Window resize"));
         unsafe { self.device.device.device_wait_idle() }.unwrap();
         let current_image_format = device::AppDevice::get_swapchain_format(
             &self.base.surface_khr,
